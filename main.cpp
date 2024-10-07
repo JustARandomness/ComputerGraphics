@@ -40,20 +40,35 @@ int main(int argc, char** argv) {
 
     // Вторая часть
 
-    Mat image1 = imread("../tosyapocalypsis.jpg", IMREAD_GRAYSCALE);
-    Mat image2 = imread("../tosyapocalypsis2.jpg", IMREAD_GRAYSCALE);
-    Mat alphaImage = imread("../tosyapocalypsis3.jpg", IMREAD_GRAYSCALE);
+    Mat image1 = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
+    Mat image2 = imread("../tosyapocalypsis2.jpg", IMREAD_COLOR);
+    Mat alphaImage = imread("../tosyapocalypsis3.jpg", IMREAD_COLOR);
 
     if (image1.empty() || image2.empty() || alphaImage.empty()) {
         std::cout << "Could not open or find the image for second part of the lab" << std::endl;
         return -1;
     }
 
+    Mat image1Grayscale= Mat::zeros(image1.rows, image1.cols, CV_8U);
+    Mat image2Grayscale= Mat::zeros(image2.rows, image2.cols, CV_8U);
+    Mat alphaImageGrayscale= Mat::zeros(alphaImage.rows, alphaImage.cols, CV_8U);
+    for (int i = 0; i < image.rows; i++) {
+        for (int j= 0; j < image.cols; j++) {
+            Vec3b pixel1 = image1.at<Vec3b>(i, j);
+            Vec3b pixel2 = image2.at<Vec3b>(i, j);
+            Vec3b alphaPixel = alphaImage.at<Vec3b>(i, j);
+            image1Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel1[2] + 0.587 * pixel1[1] + 0.114 * pixel1[0]);
+            image2Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel2[2] + 0.587 * pixel2[1] + 0.114 * pixel2[0]);
+            alphaImageGrayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * alphaPixel[2] + 0.587 * alphaPixel[1] + 0.114 * alphaPixel[0]);
+
+        }
+    }
+
     Mat blendedImage = Mat::zeros(image1.size(), CV_8U);
     for (int i = 0; i < image1.rows; i++) {
         for (int j = 0; j < image1.cols; j++) {
-            float alpha = alphaImage.at<uchar>(i, j) / 255.0f;
-            blendedImage.at<uchar>(i, j) = static_cast<uchar>(image1.at<uchar>(i, j) * alpha + image2.at<uchar>(i, j) * (1.0 - alpha));
+            float alpha = alphaImageGrayscale.at<uchar>(i, j) / 255.0f;
+            blendedImage.at<uchar>(i, j) = static_cast<uchar>(image1Grayscale.at<uchar>(i, j) * alpha + image2Grayscale.at<uchar>(i, j) * (1.0 - alpha));
         }
     }
 
