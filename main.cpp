@@ -1,86 +1,54 @@
+#include <opencv4/opencv2/opencv.hpp>
 #include <iostream>
-#include "opencv4/opencv2/opencv.hpp"
 
 using namespace cv;
 
-int main(int argc, char** argv) {
-    Mat image = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
+uchar quantizePixel(uchar pixelValue, int n) {
+    int levels = 1 << n;
+    int step = 256 / levels;
+    return (pixelValue / step) * step;
+}
 
-    if (image.empty()){
-        std::cout << "Could not open or find the image for first part of the lab" << std::endl;
+int main(int argc, char** argv) {
+    Mat image = imread("../tosyapocalypsis.jpg", IMREAD_GRAYSCALE);
+    if (image.empty()) {
+        std::cout << "Could not open or find the image." << std::endl;
         return -1;
     }
 
-    Mat grayImage(image.rows, image.cols, CV_8U);
-
-    for (int i = 0; i < image.rows; i++) {
-        for (int j= 0; j < image.cols; j++) {
-            Vec3b pixel = image.at<Vec3b>(i, j);
-            grayImage.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel[2] + 0.587 * pixel[1] + 0.114 * pixel[0]);
-        }
+    int num_colors = std::stoi(argv[1]);
+    if (num_colors < 1 || num_colors >= 8) {
+        std::cout << "num_colors must be between 1 and 7." << std::endl;
+        return -1;
     }
-    
-    Mat mask = Mat::zeros(grayImage.size(), CV_8U);
-    int radius = std::min(grayImage.rows, grayImage.cols) / 2;
-    Point center(grayImage.cols / 2, grayImage.rows / 2);
-    for (int i = 0; i < grayImage.rows; i++) {
-        for (int j = 0; j < grayImage.cols; j++) {
-            if (sqrt(pow(j - center.x, 2) + pow(i - center.y, 2)) <= radius) {
-                mask.at<uchar>(i, j) = 255;
+
+    int n = image.rows;
+    int m = image.cols;
+
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < m; ++j) {
+            uchar oldPixel = image.at<uchar>(i, j);
+            uchar newPixel = quantizePixel(oldPixel, num_colors);
+            image.at<uchar>(i, j) = newPixel;
+
+            int quantError = oldPixel - newPixel;
+
+            if (j + 1 < m) {
+                image.at<uchar>(i, j + 1) += quantError * 7 / 16;
+            }
+            if (i + 1 < n) {
+                if (j > 0) {
+                    image.at<uchar>(i + 1, j - 1) += quantError * 3 / 16;
+                }
+                image.at<uchar>(i + 1, j) += quantError * 5 / 16;
+                if (j + 1 < m) {
+                    image.at<uchar>(i + 1, j + 1) += quantError * 1 / 16;
+                }
             }
         }
     }
 
-    Mat maskedImage = Mat::zeros(grayImage.size(), grayImage.type());
-    for (int i = 0; i < grayImage.rows; i++) {
-        for (int j = 0; j < grayImage.cols; j++) {
-            maskedImage.at<uchar>(i, j) = grayImage.at<uchar>(i, j) * mask.at<uchar>(i, j) / 255;
-        }
-    }
+    imwrite("../outputImage.jpg", image);
 
-    // Вторая часть
-
-    Mat image1 = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
-    Mat image2 = imread("../tosyapocalypsis2.jpg", IMREAD_COLOR);
-    Mat alphaImage = imread("../tosyapocalypsis3.jpg", IMREAD_COLOR);
-
-    if (image1.empty() || image2.empty() || alphaImage.empty()) {
-        std::cout << "Could not open or find the image for second part of the lab" << std::endl;
-        return -1;
-    }
-
-    Mat image1Grayscale= Mat::zeros(image1.rows, image1.cols, CV_8U);
-    Mat image2Grayscale= Mat::zeros(image2.rows, image2.cols, CV_8U);
-    Mat alphaImageGrayscale= Mat::zeros(alphaImage.rows, alphaImage.cols, CV_8U);
-    for (int i = 0; i < image.rows; i++) {
-        for (int j= 0; j < image.cols; j++) {
-            Vec3b pixel1 = image1.at<Vec3b>(i, j);
-            Vec3b pixel2 = image2.at<Vec3b>(i, j);
-            Vec3b alphaPixel = alphaImage.at<Vec3b>(i, j);
-            image1Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel1[2] + 0.587 * pixel1[1] + 0.114 * pixel1[0]);
-            image2Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel2[2] + 0.587 * pixel2[1] + 0.114 * pixel2[0]);
-            alphaImageGrayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * alphaPixel[2] + 0.587 * alphaPixel[1] + 0.114 * alphaPixel[0]);
-
-        }
-    }
-
-    Mat blendedImage = Mat::zeros(image1.size(), CV_8U);
-    for (int i = 0; i < image1.rows; i++) {
-        for (int j = 0; j < image1.cols; j++) {
-            float alpha = alphaImageGrayscale.at<uchar>(i, j) / 255.0f;
-            blendedImage.at<uchar>(i, j) = static_cast<uchar>(image1Grayscale.at<uchar>(i, j) * alpha + image2Grayscale.at<uchar>(i, j) * (1.0 - alpha));
-        }
-    }
-
-    namedWindow("Image1", WINDOW_GUI_EXPANDED);
-    imshow("Image1", maskedImage);
-    imwrite("../maskedImage.jpg", maskedImage);
-
-    namedWindow("Blended Image", WINDOW_GUI_EXPANDED);
-    imshow("Blended Image", blendedImage);
-    imwrite("../blendedImage.jpg", blendedImage);
-    
-    waitKey(0);
- 
     return 0;
 }
