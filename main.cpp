@@ -1,52 +1,70 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
-int getClosestLevel(int pixel, int levels) {
-    int step = 256 / levels;
-    return step * (pixel / step);
-};
+int getClosestLevel(int value, int levels) {
+    int step = 255 / (levels - 1);
+    return round((float)value / step) * step;
+}
 
 int checkIntOverflow(int value) {
-    if (value < 0) {
-        return 0;
-    }
-    if (value > 255) {
-        return 255;
-    }
-    return value;
+    return std::clamp(value, 0, 255);
 }
 
 cv::Mat floydSteinberg(cv::Mat &image, int levels) {
     cv::Mat outputImage = image.clone();
 
     for (int i = 0; i < image.rows; ++i) {
-         for (int j = 0; j < image.cols; ++j) {
-            int oldPixel = image.at<uchar>(i, j);
-            int newPixel = getClosestLevel(oldPixel, levels);
-            outputImage.at<uchar>(i, j) = newPixel;
-            int difference = oldPixel - newPixel;
-            if (j + 1 < image.cols) {
-                int pixel = outputImage.at<uchar>(i, j + 1);
-                outputImage.at<uchar>(i, j + 1) = checkIntOverflow(pixel + 7 * difference / 16);
+        if (i % 2 == 0) {
+            for (int j = 0; j < image.cols; ++j) {
+                int oldPixel = outputImage.at<uchar>(i, j);
+                int newPixel = getClosestLevel(oldPixel, levels);  
+                outputImage.at<uchar>(i, j) = newPixel;
+
+                int difference = oldPixel - newPixel;
+
+                if (j + 1 < image.cols) {
+                    outputImage.at<uchar>(i, j + 1) = checkIntOverflow(outputImage.at<uchar>(i, j + 1) + difference * 7 / 16);
+                }
+                if (j + 1 < image.cols && i + 1 < image.rows) {
+                    outputImage.at<uchar>(i + 1, j + 1) = checkIntOverflow(outputImage.at<uchar>(i + 1, j + 1)  + difference * 1 / 16);
+                }
                 if (i + 1 < image.rows) {
-                    int pixel = outputImage.at<uchar>(i + 1, j + 1);
-                    outputImage.at<uchar>(i + 1, j + 1) = checkIntOverflow(pixel + difference / 16);
+                    outputImage.at<uchar>(i + 1, j) = checkIntOverflow(outputImage.at<uchar>(i + 1, j) + difference * 5 / 16);
+                }
+                if (j - 1 >= 0 && i + 1 < image.rows) {
+                    outputImage.at<uchar>(i + 1, j - 1) = checkIntOverflow(outputImage.at<uchar>(i + 1, j - 1) + difference * 3 / 16);
                 }
             }
-            if (i + 1 < image.rows) {
-                int pixel = outputImage.at<uchar>(i + 1, j);
-                outputImage.at<uchar>(i + 1, j) = checkIntOverflow(pixel + 5 * difference / 16);
-            }
-            if (j - 1 >= 0 && i + 1 < image.rows) {
-                 int pixel = outputImage.at<uchar>(i + 1, j - 1);
-                outputImage.at<uchar>(i + 1, j - 1) = checkIntOverflow(pixel + 3 * difference / 16);
+        }
+        else {
+            for (int j = image.cols - 1; j >= 0; --j) {
+                int oldPixel = outputImage.at<uchar>(i, j);
+                int newPixel = getClosestLevel(oldPixel, levels);  
+                outputImage.at<uchar>(i, j) = newPixel;
+
+                int difference = oldPixel - newPixel;
+
+                if (j - 1 >= 0) {
+                    outputImage.at<uchar>(i, j - 1) = checkIntOverflow(outputImage.at<uchar>(i, j - 1) + difference * 7 / 16);
+                }
+                if (j - 1 >= 0 && i + 1 < image.rows) {
+                    outputImage.at<uchar>(i + 1, j - 1) = checkIntOverflow(outputImage.at<uchar>(i + 1, j - 1)  + difference * 1 / 16);
+                }
+                if (i + 1 < image.rows) {
+                    outputImage.at<uchar>(i + 1, j) = checkIntOverflow(outputImage.at<uchar>(i + 1, j) + difference * 5 / 16);
+                }
+                if (j + 1 < image.cols && i + 1 < image.rows) {
+                    outputImage.at<uchar>(i + 1, j + 1) = checkIntOverflow(outputImage.at<uchar>(i + 1, j + 1) + difference * 3 / 16);
+                }
             }
         }
     }
 
     return outputImage;
 }
+
 
 int main(int argc, char** argv) {
     cv::Mat image = cv::imread("../tosyapocalypsis.jpg", cv::IMREAD_GRAYSCALE);
@@ -60,13 +78,13 @@ int main(int argc, char** argv) {
     }
 
     if (n == 8) {
-        imwrite("../outputImage.png", image);
+        cv::imwrite("../outputImage.png", image);
         return 0;
     }
 
-    cv::Mat outputImage = floydSteinberg(image, n);
+    cv::Mat outputImage = floydSteinberg(image, static_cast<int>(std::pow(2, n)));
 
-    imwrite("../outputImage.png", outputImage);
+    cv::imwrite("../outputImage.png", outputImage);
     
     return 0;
 }
