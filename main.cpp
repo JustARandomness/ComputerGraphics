@@ -3,82 +3,324 @@
 
 using namespace cv;
 
-int main(int argc, char** argv) {
-    Mat image = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
+enum CLPointType {LEFT, RIGHT, BEYOND, BEHIND, BETWEEN, ORIGIN, DESTINATION};
+enum IntersectType {SAME, PARALLEL, SKEW, SKEW_CROSS, SKEW_NO_CROSS};
+enum EType {TOUCHING, CROSS_LEFT, CROSS_RIGHT, INESSENTIAL};
+enum PType {INSIDE, OUTSIDE};
+enum fillType {EO, NZW};
 
-    if (image.empty()){
-        std::cout << "Could not open or find the image for first part of the lab" << std::endl;
-        return -1;
+CLPointType classify(Point p1, Point p2, Point p) {
+    double ax = p2.x - p1.x;
+    double ay = p2.y - p1.y;
+    double bx = p.x - p1.x;
+    double by = p.y - p1.y;
+    double s = ax * by - bx * ay;
+    
+    if (s > 0) return LEFT;
+    if (s < 0) return RIGHT;
+    if ((ax * bx < 0) || (ay * by < 0)) return BEHIND;
+    if ((ax * ax + ay * ay) < (bx * bx + by * by)) return BEYOND;
+    if (p1.x == p.x && p1.y == p.y) return ORIGIN;
+    if (p2.x == p.x && p2.y == p.y) return DESTINATION;
+    return BETWEEN;
+}
+
+EType getEdgeType(Point o, Point d, Point a) {
+    switch(classify(o, d, a)) {
+        case LEFT:
+            if (a.y > o.y && a.y <= d.y) {
+                return CROSS_LEFT;
+            }
+            else {
+                return INESSENTIAL;
+            }
+        case RIGHT:
+            if (a.y > d.y && a.y <= o.y) {
+                return CROSS_RIGHT;
+            }
+            else {
+                return INESSENTIAL;
+            }
+        case BETWEEN:
+        case ORIGIN:
+        case DESTINATION:
+            return TOUCHING;
+        default:
+            return INESSENTIAL;
     }
+}
 
-    Mat grayImage(image.rows, image.cols, CV_8U);
+PType PInPolygonEOMode(Point p, const std::vector<Point>& points) {
+    int n = points.size();
+    int param = 0;
+    for (int i = 0; i < n; ++i) {
+        switch(getEdgeType(points[i], points[(i + 1) % n], p)) {
+            case TOUCHING:
+                return INSIDE;
+            case CROSS_LEFT:
+            case CROSS_RIGHT:
+                param = 1 - param;
+        }
+    }
+    if (param == 1) {
+        return INSIDE;
+    } 
+    else {
+        return OUTSIDE;
+    }
+}
 
-    for (int i = 0; i < image.rows; i++) {
-        for (int j= 0; j < image.cols; j++) {
-            Vec3b pixel = image.at<Vec3b>(i, j);
-            grayImage.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel[2] + 0.587 * pixel[1] + 0.114 * pixel[0]);
+PType PInPolygonNZWMode(Point p, const std::vector<Point>& points) {
+    int n = points.size();
+    int param = 0;
+    for (int i = 0; i < n; ++i) {
+        switch(getEdgeType(points[i], points[(i + 1) % n], p)) {
+            case TOUCHING:
+                return INSIDE;
+            case CROSS_LEFT:
+                param++;
+                break;
+            case CROSS_RIGHT:
+                param--;
+                break;
         }
     }
     
-    Mat mask = Mat::zeros(grayImage.size(), CV_8U);
-    int radius = std::min(grayImage.rows, grayImage.cols) / 2;
-    Point center(grayImage.cols / 2, grayImage.rows / 2);
-    for (int i = 0; i < grayImage.rows; i++) {
-        for (int j = 0; j < grayImage.cols; j++) {
-            if (sqrt(pow(j - center.x, 2) + pow(i - center.y, 2)) <= radius) {
-                mask.at<uchar>(i, j) = 255;
+    if (param == 0) {
+        return OUTSIDE;
+    } 
+    else {
+        return INSIDE;
+    }
+}
+
+void fillPolygon(Mat& img, std::vector<Point>& points, fillType type) {
+    int n = img.rows;
+    int m = img.cols;
+    if (type == EO) {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (PInPolygonEOMode(Point(j, i), points) == INSIDE) {
+                    img.at<Vec3b>(i, j) = Vec3b(0, 0, 255);
+                }
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (PInPolygonNZWMode(Point(j, i), points) == INSIDE) {
+                    img.at<Vec3b>(i, j) = Vec3b(0, 0, 255);
+                }
+            }
+        }
+    }
+}
+
+IntersectType intersect(Point a, Point b, Point c, Point d, double* t) {
+    double nx = d.y - c.y;
+    double ny = c.x - d.x;
+    CLPointType type;
+    double denom = nx * (b.x - a.x) + ny * (b.y - a.y);
+    if (denom == 0) {
+        type = classify(c, d, a);
+        if (type == LEFT || type == RIGHT) {
+            return PARALLEL;
+        }
+        else {
+            return SAME;
+        }
+    }
+    double num = nx * (a.x - c.x) + ny * (a.y - c.y);
+    *t = -num/denom;
+    return SKEW;
+}
+
+IntersectType cross(Point a, Point b, Point c, Point d, double* tab, double* tcd) {
+    IntersectType type = intersect(a, b, c, d, tab);
+    if (type == SAME || type == PARALLEL) {
+        return type;
+    }
+    if ((*tab < 0) || (*tab > 1)) {
+        return SKEW_NO_CROSS;
+    }
+    intersect(c, d, a, b, tcd);
+    if ((*tcd < 0) || (*tcd > 1)) {
+        return SKEW_NO_CROSS;
+    }
+     return SKEW_CROSS;
+}
+
+bool isComplex(const std::vector<Point>& points) {
+    int n = points.size();
+    if (n < 3) return true;
+    for (int i = 0; i < n; ++i) {
+        Point a = points[i];
+        Point b = points[(i + 1) % n];
+
+        for (int j = i + 2; j < n; ++j) {
+            if (j == (i + n - 1) % n) {
+                continue;
+            }
+
+            Point c = points[j];
+            Point d = points[(j + 1) % n];
+
+
+            double tab, tcd;
+            IntersectType type = cross(a, b, c, d, &tab, &tcd);
+            if (type == SKEW_CROSS) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool isConvex(const std::vector<Point>& points) {
+    int n = points.size();
+    if (n < 3) return false;
+
+    CLPointType initialSide = LEFT;
+    bool sideSet = false;
+
+    for (int i = 0; i < n; ++i) {
+        cv::Point p1 = points[i];
+        cv::Point p2 = points[(i + 1) % n];
+
+        
+        for (int j = 0; j < n; ++j) {
+            if (j == i || j == (i + 1) % n) continue;
+
+            CLPointType position = classify(p1, p2, points[j]);
+            
+            if (position == LEFT || position == RIGHT) {
+                if (!sideSet) {
+                    initialSide = position;
+                    sideSet = true;
+                } 
+                else if (position != initialSide) {
+                    return false;
+                }
             }
         }
     }
 
-    Mat maskedImage = Mat::zeros(grayImage.size(), grayImage.type());
-    for (int i = 0; i < grayImage.rows; i++) {
-        for (int j = 0; j < grayImage.cols; j++) {
-            maskedImage.at<uchar>(i, j) = grayImage.at<uchar>(i, j) * mask.at<uchar>(i, j) / 255;
+    return true;
+}
+
+void drawLine(Mat& img, Point p1, Point p2) {
+    int x2 = p2.x, y2 = p2.y;
+    int x = p1.x, y = p1.y;
+    int dx = (x < x2) ? x2 - x : x - x2;
+    int dy = (y < y2) ? y2 - y : y - y2;
+    int ix = (x < x2) ? 1 : -1;
+    int iy = (y < y2) ? 1 : -1;
+    int error;
+    if (dx >= dy) {
+        error = 2 * dy - dx;
+        if (iy >= 0) {
+            for (int i = 0; i < dx; ++i) {
+                img.at<Vec3b>(y, x) = Vec3b(0, 0, 0);
+                if (error >= 0) {
+                    y += iy;
+                    error -= 2 * dx;
+                }
+                x += ix;
+                error += 2 * dy;
+            }
+        }
+        else {
+            for (int i = 0; i < dx; ++i) {
+                img.at<Vec3b>(y, x) = Vec3b(0, 0, 0);
+                if (error > 0) {
+                    y += iy;
+                    error -= 2 * dx;
+                }
+                x += ix;
+                error += 2 * dy;
+            }
         }
     }
+    else {
+        error = 2 * dx - dy;
+        if (iy >= 0) {
+            for (int i = 0; i < dy; ++i) {
+                img.at<Vec3b>(y, x) = Vec3b(0, 0, 0);
+                if (error >= 0) {
+                    x += ix;
+                    error -= 2 * dy;
+                }
+                y += iy;
+                error += 2 * dx;
+            }
+        }
+        else {
+            for (int i = 0; i < dy; ++i) {
+                img.at<Vec3b>(y, x) = Vec3b(0, 0, 0);
+                if (error > 0) {
+                    x += ix;
+                    error -= 2 * dy;
+                }
+                y += iy;
+                error += 2 * dx;
+            }
+        }
+    }
+}
 
-    // Вторая часть
+void drawPolygon(Mat& img, std::vector<Point>& points) {
+    for (int i = 0; i < points.size(); ++i) {
+        drawLine(img, points[i], points[(i + 1) % points.size()]);
+    }
+}
 
-    Mat image1 = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
-    Mat image2 = imread("../tosyapocalypsis2.jpg", IMREAD_COLOR);
-    Mat alphaImage = imread("../tosyapocalypsis3.jpg", IMREAD_COLOR);
+int main(int argc, char** argv) {
+    Mat img1(500, 500, CV_8UC3, Scalar(255, 255, 255));
+    Mat img2(500, 500, CV_8UC3, Scalar(255, 255, 255));
 
-    if (image1.empty() || image2.empty() || alphaImage.empty()) {
-        std::cout << "Could not open or find the image for second part of the lab" << std::endl;
+    int n;
+    std::cout << "Enter number of points: ";
+    std::cin >> n;
+
+    if (n <= 0) {
+        std::cout << "Invalid number of points" << std::endl;
         return -1;
     }
 
-    Mat image1Grayscale= Mat::zeros(image1.rows, image1.cols, CV_8U);
-    Mat image2Grayscale= Mat::zeros(image2.rows, image2.cols, CV_8U);
-    Mat alphaImageGrayscale= Mat::zeros(alphaImage.rows, alphaImage.cols, CV_8U);
-    for (int i = 0; i < image.rows; i++) {
-        for (int j= 0; j < image.cols; j++) {
-            Vec3b pixel1 = image1.at<Vec3b>(i, j);
-            Vec3b pixel2 = image2.at<Vec3b>(i, j);
-            Vec3b alphaPixel = alphaImage.at<Vec3b>(i, j);
-            image1Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel1[2] + 0.587 * pixel1[1] + 0.114 * pixel1[0]);
-            image2Grayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * pixel2[2] + 0.587 * pixel2[1] + 0.114 * pixel2[0]);
-            alphaImageGrayscale.at<uchar>(i, j) = static_cast<uchar>(0.299 * alphaPixel[2] + 0.587 * alphaPixel[1] + 0.114 * alphaPixel[0]);
-
-        }
+    std::vector<Point> points;
+    for (int i = 0; i < n; ++i) {
+        int x, y;
+        std::cout << "Enter point " << i + 1 << ": ";
+        std::cin >> x >> y;
+        points.push_back(Point(x, y));
     }
 
-    Mat blendedImage = Mat::zeros(image1.size(), CV_8U);
-    for (int i = 0; i < image1.rows; i++) {
-        for (int j = 0; j < image1.cols; j++) {
-            float alpha = alphaImageGrayscale.at<uchar>(i, j) / 255.0f;
-            blendedImage.at<uchar>(i, j) = static_cast<uchar>(image1Grayscale.at<uchar>(i, j) * alpha + image2Grayscale.at<uchar>(i, j) * (1.0 - alpha));
-        }
+    drawPolygon(img1, points);
+    drawPolygon(img2, points);
+
+    if (isConvex(points)) {
+        std::cout << "Многоугольник выпуклый" << std::endl;
+    }
+    else {
+        std::cout << "Многоугольник вогнутый" << std::endl;
     }
 
-    namedWindow("Image1", WINDOW_GUI_EXPANDED);
-    imshow("Image1", maskedImage);
-    imwrite("../maskedImage.jpg", maskedImage);
+    if (isComplex(points)) {
+        std::cout << "Многоугольник сложный" << std::endl;
+    }
+    else {
+        std::cout << "Многоугольник простой" << std::endl;
+    }
 
-    namedWindow("Blended Image", WINDOW_GUI_EXPANDED);
-    imshow("Blended Image", blendedImage);
-    imwrite("../blendedImage.jpg", blendedImage);
+    imwrite("../polygon.png", img1);
+
+    fillPolygon(img1, points, EO);
+    fillPolygon(img2, points, NZW);
+
+
+    imwrite("../fillEO.png", img1);
+    imwrite("../fillNZW.png", img2);
     
     waitKey(0);
  
