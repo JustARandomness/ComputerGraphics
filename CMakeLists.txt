@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project( Lab4 )
+project( Lab5 )
 find_package( OpenCV REQUIRED )
-add_executable( Lab4 main.cpp )
-target_link_libraries( Lab4 ${OpenCV_LIBS} )
+add_executable( Lab5 main.cpp )
+target_link_libraries( Lab5 ${OpenCV_LIBS} )
