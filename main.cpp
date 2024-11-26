@@ -146,12 +146,12 @@ void drawCirclePart(Mat& img, Point center, double radius, double alpha, double 
     for (int i = 0; i < numParts; ++i) {
         Point p0 = Point(center.x + int(std::round(radius * std::cos(alpha  + i * angleStep))), 
                          center.y + int(std::round(radius * std::sin(alpha  + i * angleStep))));
-        if (i == 0) {
+        if (i == 0 && alpha != beta) {
             drawLine(img, center, p0);
         }
         Point p3 = Point(center.x + int(std::round(radius * std::cos(alpha  + (i + 1) * angleStep))), 
                          center.y + int(std::round(radius * std::sin(alpha + (i + 1) * angleStep))));
-        if (i == numParts - 1) {
+        if (i == numParts - 1 && alpha != beta) {
             drawLine(img, center, p3);
         }
         Point Pt = findIntersection(center, radius, p0, p3);
