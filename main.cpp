@@ -190,7 +190,7 @@ void drawPolygon(Mat& img, std::vector<Point>& points) {
 }
 
 int main() {
-    Mat img(1000, 1000, CV_8UC3, Scalar(255, 255, 255));
+    Mat img(500, 500, CV_8UC3, Scalar(255, 255, 255));
     std::vector<Point> points;
     int n;
     std::cin >> n;
@@ -199,12 +199,11 @@ int main() {
         std::cin >> x >> y;
         points.push_back(Point(x, y));
     }
-    namedWindow("img1");
-    namedWindow("img2");
+
     drawPolygon(img, points);
-    imshow("img1", img);
+    imwrite("../polygon.jpg", img);
     std::vector<Point> contour = findContour(points);
     drawPolygon(img, contour);
-    imshow("img2", img);
+    imwrite("../contouredPolygon.jpg", img);
     waitKey(0);
 }
