@@ -118,14 +118,11 @@ Point findIntersection(Point O, double R, Point A, Point B) {
     double x = (d1 * b2 - d2 * b1) / det;
     double y = (a1 * d2 - a2 * d1) / det;
 
-    std::cout << x << " " << y;
-
     return Point(int(x), int(y));
 }
 
 void drawCirclePart(Mat& img, Point center, double radius, double alpha, double beta) {
     double quarterLen = M_PI * radius / 2;
-    std::cout << alpha << " " << beta << " ";
     if (alpha > 180) alpha = alpha - 360;
     if (beta > 180) beta = beta - 360;
     if (alpha > beta) {
@@ -165,7 +162,7 @@ void drawCirclePart(Mat& img, Point center, double radius, double alpha, double 
 
 int main() {
     Mat img(1000, 1000, CV_8UC3, Scalar(255, 255, 255));
-    drawCirclePart(img, Point(500, 500), 200.0, 60.0, 200.0);
+    drawCirclePart(img, Point(500, 500), 200.0, 60.0, 270.0);
     imwrite("../circle.png", img);
     return 0;
 }
