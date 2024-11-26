@@ -11,32 +11,25 @@ double getDist(Vec3f a, Vec3f b) {
     return std::sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
 }
 
-int main() {
-    Mat img = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
-    // std::cout << img.channels();
-    // std::cout << img.size() << " " << img.type();
+Mat kMeans(Mat& img, int k) {
     Mat data;
-    img.convertTo(data, CV_32F);
-    data = data.reshape(img.rows * img.cols);
+    img.convertTo(data, CV_32FC3);
+    data = data.reshape(1, img.rows * img.cols);
+    
+    std::vector<Vec3f> centers(k);
+    std::vector<int> labels(data.rows);
 
-    int k;
-    std::cin >> k;
-    std::cout << data.size();
-    std::vector<Vec3f> centers(k, 0);
-    std::vector<int> labels(data.cols);
-
+    srand(time(0));
     for (int i = 0; i < k; ++i) {
-        centers[i] = data.at<Vec3f>(rand() % data.cols, 0);
+        centers[i] = data.at<Vec3f>(rand() % data.rows, 0);
     }
 
     bool hasChanged = true;
     int iterations = 0;
 
-    srand(time(0));
-
-
     while (hasChanged && iterations < 100) {
-        for (int i = 0; i < data.cols; ++i) {
+        hasChanged = false;
+        for (int i = 0; i < data.rows; ++i) {
             float minDist = FLT_MAX;
             int bestCluster = 0;
             for (int j = 0; j < k; ++j) {
@@ -55,7 +48,7 @@ int main() {
         std::vector<Vec3f> newCenters(k, Vec3f(0, 0, 0));
         std::vector<int> counts(k, 0);
 
-        for (int i = 0; i < data.cols; ++i) {
+        for (int i = 0; i < data.rows; ++i) {
             int cluster = labels[i];
             newCenters[cluster] += data.at<Vec3f>(i, 0);
             counts[cluster]++;
@@ -70,24 +63,25 @@ int main() {
         iterations++;
     }
 
-    Mat img2(img.size(), img.type());
-    for (int i = 0; i < data.cols; ++i) {
+    Mat result(img.size(), img.type());
+    for (int i = 0; i < data.rows; ++i) {
         int cluster = labels[i];
         Vec3f color = centers[cluster];
-        Vec3b finalColor(
+        result.at<Vec3b>(i / img.cols, i % img.cols) = Vec3b(
             static_cast<uchar>(std::min(255.0f, std::max(0.0f, color[0]))),
             static_cast<uchar>(std::min(255.0f, std::max(0.0f, color[1]))),
             static_cast<uchar>(std::min(255.0f, std::max(0.0f, color[2])))
         );
-        // std::cout << i / img.cols << " " <<  i % img.cols <<  " " << float(i) / img.cols <<std::endl;
-        img2.at<Vec3b>(i / img.cols, i % img.cols) = finalColor;
     }
+    return result;
+}
 
-    namedWindow("initial image", WINDOW_GUI_EXPANDED);
-    imshow("initial image", img);
+int main() {
+    Mat img = imread("../tosyapocalypsis.jpg", IMREAD_COLOR);
 
-    namedWindow("img", WINDOW_GUI_EXPANDED);
-    imshow("img", img2);
-    waitKey(0);
+    int k;
+    std::cin >> k;
+
+    imwrite("../k-means.jpg", kMeans(img, k));
     return 0;
 }
