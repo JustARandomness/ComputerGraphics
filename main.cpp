@@ -163,6 +163,6 @@ void drawCirclePart(Mat& img, Point center, double radius, double alpha, double 
 int main() {
     Mat img(1000, 1000, CV_8UC3, Scalar(255, 255, 255));
     drawCirclePart(img, Point(500, 500), 200.0, 60.0, 270.0);
-    imwrite("../circle.png", img);
+    imwrite("../arc.png", img);
     return 0;
 }
