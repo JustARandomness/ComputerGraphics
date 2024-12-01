@@ -12,7 +12,7 @@ enum EType {TOUCHING, CROSS_LEFT, CROSS_RIGHT, INESSENTIAL};
 enum PType {INSIDE, OUTSIDE};
 enum fillType {EO, NZW};
 
-CLPointType classify(Point p1, Point p2, Point p) {
+CLPointType classify(Point2d p1, Point2d p2, Point2d p) {
     double ax = p2.x - p1.x;
     double ay = p2.y - p1.y;
     double bx = p.x - p1.x;
@@ -77,13 +77,16 @@ PType PInPolygonNZWMode(Point p, const std::vector<Point2d>& points) {
     }
 }
 
-void fillPolygon(Mat& img, std::vector<Point2d>& points) {
-    int n = img.rows;
-    int m = img.cols;
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < m; ++j) {
+void fillPolygon(Mat& img, std::vector<Point2d>& points, Vec3b color) {
+    int xMin = std::min_element(points.begin(), points.end(), [](Point2d a, Point2d b) { return a.x < b.x; })->x;
+    int xMax = std::max_element(points.begin(), points.end(), [](Point2d a, Point2d b) { return a.x < b.x; })->x;
+    int yMin = std::min_element(points.begin(), points.end(), [](Point2d a, Point2d b) { return a.y < b.y; })->y;
+    int yMax = std::max_element(points.begin(), points.end(), [](Point2d a, Point2d b) { return a.y < b.y; })->y;
+    // std::cout << xMin << " " << xMax << " " << yMin << " " << yMax << std::endl;
+    for (int i = yMin; i < yMax; ++i) {
+        for (int j = xMin; j < xMax; ++j) {
             if (PInPolygonNZWMode(Point(j, i), points) == INSIDE) {
-                img.at<Vec3b>(i, j) = Vec3b(0, 0, 255);
+                img.at<Vec3b>(i, j) = color;
             }
         }
     }
@@ -219,6 +222,10 @@ void drawCubePerspective(Mat& img, std::vector<Point3d> transoformedPoints, Poin
 
     Point3d viewDir(0, 0, -1);
 
+    int cnt = 0;
+
+    std::vector<Vec3b> colors = {Vec3b(100, 0, 0), Vec3b(0, 100, 0), Vec3b(0, 0, 100), Vec3b(100, 100, 0)};
+
     for (const auto& face : faces) {
         Point3d normal = getNormal(
             transoformedPoints[face[0]],
@@ -237,10 +244,12 @@ void drawCubePerspective(Mat& img, std::vector<Point3d> transoformedPoints, Poin
         }
 
         std::vector<Point2d> facePoints;
+        Point2d imgCenter = Point2d(img.cols / 2, img.rows / 2);
         for (int i = 0; i < face.size(); ++i) {
-            facePoints.push_back(Point2d(transoformedPoints[face[i]].x, transoformedPoints[face[i]].y));
+            facePoints.push_back(Point2d(transoformedPoints[face[i]].x + imgCenter.x - center.x, img.rows - (transoformedPoints[face[i]].y + imgCenter.y - center.y)));
         }
-        fillPolygon(img, facePoints);
+        fillPolygon(img, facePoints, colors[cnt % colors.size()]);
+        cnt++;
     }
 }
 
@@ -257,13 +266,16 @@ void drawCubeParallel(Mat& img, std::vector<Point2d> newPoints, std::vector<Poin
 
     Point3d viewDir(0, 0, -1);
 
+    int cnt = 0;
+
+    std::vector<Vec3b> colors = {Vec3b(100, 0, 0), Vec3b(0, 100, 0), Vec3b(0, 0, 100), Vec3b(100, 100, 0)};
+
     for (const auto& face : faces) {
         Point3d normal = getNormal(
             originalPoints[face[0]],
             originalPoints[face[1]],
             originalPoints[face[2]]
         );
-
 
         if (!isFrontFace(normal, viewDir)) {
             continue;
@@ -272,6 +284,14 @@ void drawCubeParallel(Mat& img, std::vector<Point2d> newPoints, std::vector<Poin
         for (int i = 0; i < face.size(); ++i) {
             drawLine(img, newPoints[face[i]], newPoints[face[(i + 1) % face.size()]], center);
         }
+
+        std::vector<Point2d> facePoints;
+        Point2d imgCenter = Point2d(img.cols / 2, img.rows / 2);
+        for (int i = 0; i < face.size(); ++i) {
+            facePoints.push_back(Point2d(newPoints[face[i]].x + imgCenter.x - center.x, img.rows - (newPoints[face[i]].y + imgCenter.y - center.y)));
+        }
+        fillPolygon(img, facePoints, colors[cnt % colors.size()]);
+        cnt++;
     }
 }
 
@@ -349,7 +369,7 @@ int main() {
     }
     
     Point3d normal(1, 0, 0);
-    animatePerspective(img, points, normal, 120, 400);
+    animateParallel(img, points, normal, 120);
     // animateParallel(img, points, normal, 120);
 
     // char projectionType;
